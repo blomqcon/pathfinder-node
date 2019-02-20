@@ -7,6 +7,7 @@
       "target_name": "pathfinder-node",
       "sources": [
         "src/pathfinder-node.cc",
+        "src/PathfinderConvert.cc",
         "src/WaypointObject.cc",
       ],
       "libraries": [  ],

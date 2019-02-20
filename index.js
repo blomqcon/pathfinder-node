@@ -1,16 +1,18 @@
 'use strict'
-var bindings = require('bindings');
+var pathfinderIO = require('./io');
 
-// TODO: Figure out how to configure this so that dev
-//       machines (C++ toolchain setup) build the
-//       binary but other machines use the prebuilt binaries.
-var pathfinder;
-// if(process.platform == "win32" && process.arch == "x64") {
-//     // Load the precompiled binary for windows x64.
-// 	pathfinder = require('./bin/winx64/pathfinder-node');
-// } else {
-	// Load the new built binary for other platforms.
-	pathfinder = bindings('pathfinder-node');
-// }
+const devMode = true;
 
-module.exports = pathfinder;
+let pathfinder;
+if (devMode) {
+	pathfinder = require('./build/Release/pathfinder-node');
+} else if(process.platform == "win32" && process.arch == "x64") {
+	pathfinder = require('./pre-built-binaries/winx64/pathfinder-node');
+} else {
+	throw new Error("No pre-built-binary for your system.");
+}
+
+module.exports = {
+	core: pathfinder,
+	io: pathfinderIO
+};

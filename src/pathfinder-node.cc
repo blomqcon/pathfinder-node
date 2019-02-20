@@ -1,6 +1,7 @@
 #include <nan.h>
 #include <pathfinder.h>
 
+#include "PathfinderConvert.h"
 // #include "WaypointObject.h"
 // #include "SegmentObject.h"
 
@@ -11,9 +12,8 @@
 // TODO: Reference + link aggainst Pathfinder-Core (binding.gyp).
 // TODO: Reference and use Pathfinder-Core here.
 
-void GenerateTrajectory (const Nan::FunctionCallbackInfo<v8::Value>& info) {
-  std::cout << "Number of arguments: " << info.Length() << "\n";
-
+void generateTrajectory (const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  // std::cout << "Number of arguments: " << info.Length() << "\n";
   if (info.Length() != 2) {
     Nan::ThrowTypeError("Wrong number of arguments");
     return;
@@ -23,47 +23,102 @@ void GenerateTrajectory (const Nan::FunctionCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Object> trajectoryConfigObject = v8::Local<v8::Array>::Cast(info[1]);
 
   // TODO: Remember to delete this memory
-  Waypoint* waypoints = new Waypoint[waypointObjects->Length()];
-  for (unsigned int i = 0; i < waypointObjects->Length(); i++)
-  {
-    v8::Local<v8::Object> waypointObject = waypointObjects->Get(i).As<v8::Object>();
-
-    // TODO: Be more error tolerent
-    v8::MaybeLocal<v8::Value> xValue = waypointObject->GetRealNamedProperty(Nan::GetCurrentContext(), Nan::New("x").ToLocalChecked());
-    v8::MaybeLocal<v8::Value> yValue = waypointObject->GetRealNamedProperty(Nan::GetCurrentContext(), Nan::New("y").ToLocalChecked());
-    v8::MaybeLocal<v8::Value> angleValue = waypointObject->GetRealNamedProperty(Nan::GetCurrentContext(), Nan::New("angle").ToLocalChecked());
-
-    v8::Local<v8::Number> xNumber = xValue.ToLocalChecked().As<v8::Number>();
-    v8::Local<v8::Number> yNumber = yValue.ToLocalChecked().As<v8::Number>();
-    v8::Local<v8::Number> angleNumber = angleValue.ToLocalChecked().As<v8::Number>();
-
-    waypoints[i] = { xNumber->Value(), yNumber->Value(), angleNumber->Value() };
-  }
-
+  int numWaypoints = waypointObjects->Length();
+  Waypoint* waypoints = PathfinderConvert::allocateWaypoints(waypointObjects);
+  
   TrajectoryCandidate candidate;
-  pathfinder_prepare(waypoints, waypointObjects->Length(), FIT_HERMITE_CUBIC, PATHFINDER_SAMPLES_HIGH, 0.001, 15.0, 10.0, 60.0, &candidate);
+  pathfinder_prepare(waypoints, numWaypoints, FIT_HERMITE_CUBIC, PATHFINDER_SAMPLES_HIGH, 0.001, 15.0, 10.0, 60.0, &candidate);
 
-  // TODO: need to free trjacetory
-  int length = candidate.length;
-  Segment *trajectory = new Segment[length];
-  //pathfinder_generate(&candidate, trajectory);
-
-  v8::Local<v8::Array> trajectoryArray = Nan::New<v8::Array>();
-  for (int i = 0; i < length; i++ ) {
-    Segment segment = trajectory[i];
-    v8::Local<v8::Object> segmentObject = Nan::New<v8::Object>();
-    
-    Nan::Set(segmentObject, Nan::New("dt").ToLocalChecked(), Nan::New(segment.dt));
-    Nan::Set(segmentObject, Nan::New("x").ToLocalChecked(), Nan::New(segment.x));
-    Nan::Set(segmentObject, Nan::New("y").ToLocalChecked(), Nan::New(segment.y));
-    Nan::Set(segmentObject, Nan::New("position").ToLocalChecked(), Nan::New(segment.position));
-    Nan::Set(segmentObject, Nan::New("velocity").ToLocalChecked(), Nan::New(segment.velocity));
-    Nan::Set(segmentObject, Nan::New("acceleration").ToLocalChecked(), Nan::New(segment.acceleration));
-    Nan::Set(segmentObject, Nan::New("jerk").ToLocalChecked(), Nan::New(segment.jerk));
-    Nan::Set(segmentObject, Nan::New("heading").ToLocalChecked(), Nan::New(segment.heading));
-
-    trajectoryArray->Set(i, segmentObject);
+  if (candidate.length <= 0)
+  {
+    // TODO: invalid waypoints + config
   }
+
+  // TODO: Remember to Delete this memory
+  Segment* trajectory = new Segment[candidate.length];
+  pathfinder_generate(&candidate, trajectory);
+  v8::Local<v8::Array> trajectoryArray = PathfinderConvert::createTrajectoryArray(trajectory, candidate.length);
+
+  info.GetReturnValue().Set(trajectoryArray);
+}
+
+void generateTankTrajectories (const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  if (info.Length() != 2) {
+    Nan::ThrowTypeError("Wrong number of arguments");
+    return;
+  }
+
+  v8::Local<v8::Array> segmentObjects = v8::Local<v8::Array>::Cast(info[0]);
+  v8::Local<v8::Number> wheelbaseWidthObject = v8::Local<v8::Number>::Cast(info[1]);
+
+  double wheelbaseWidth = wheelbaseWidthObject->Value();
+  Segment* trajectory = PathfinderConvert::allocateSegments(segmentObjects);
+
+  int trajectoryLength = segmentObjects->Length();
+  Segment* leftTrajectory = new Segment[trajectoryLength];
+  Segment* rightTrajectory = new Segment[trajectoryLength];
+
+  pathfinder_modify_tank(trajectory, trajectoryLength, leftTrajectory, rightTrajectory, wheelbaseWidth);
+
+  v8::Local<v8::Array> leftTrajectoryArray = PathfinderConvert::createTrajectoryArray(leftTrajectory, trajectoryLength);
+  v8::Local<v8::Array> rightTrajectoryArray = PathfinderConvert::createTrajectoryArray(rightTrajectory, trajectoryLength);
+
+  v8::Local<v8::Object> trajectories = Nan::New<v8::Object>();
+  Nan::Set(trajectories, Nan::New("leftTrajectory").ToLocalChecked(), leftTrajectoryArray);
+  Nan::Set(trajectories, Nan::New("rightTrajectory").ToLocalChecked(), rightTrajectoryArray);
+  
+  info.GetReturnValue().Set(trajectories);
+}
+
+void serializeTrajectory(const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  if (info.Length() != 2) {
+    Nan::ThrowTypeError("Wrong number of arguments");
+    return;
+  }
+
+  v8::Local<v8::String> filePathObject = v8::Local<v8::String>::Cast(info[0]);
+  v8::Local<v8::Array> segmentObjects = v8::Local<v8::Array>::Cast(info[1]);
+
+  char* filePath = (char*)malloc(filePathObject->Utf8Length());
+  filePathObject->WriteUtf8(filePath, filePathObject->Utf8Length());
+  
+
+  //FILE* fp = fopen(filePath, "wb");
+  FILE* fp = fopen("test_serialize.trajectory", "w+");
+  Segment* trajectory = PathfinderConvert::allocateSegments(segmentObjects);
+  std::cout << "Segements-To-Serialize: " << segmentObjects->Length() << "\n";
+  //std::cout << "File-Path: " << filePath << "\n\n\n";
+  
+  //pathfinder_serialize_csv(fp, trajectory, segmentObjects->Length() - 1);
+  pathfinder_serialize_csv(fp, trajectory, 50);
+  std::cout << "Here Here Here " << "\n";
+
+  delete trajectory;
+  fclose(fp);
+
+  info.GetReturnValue().SetUndefined();
+}
+
+void deserializeTrajectory(const Nan::FunctionCallbackInfo<v8::Value>& info) {
+  if (info.Length() != 1) {
+    Nan::ThrowTypeError("Wrong number of arguments");
+    return;
+  }
+
+  v8::Local<v8::String> filePathObject = v8::Local<v8::String>::Cast(info[0]);
+
+  char* filePath = (char*)malloc(filePathObject->Utf8Length());
+  filePathObject->WriteUtf8(filePath, filePathObject->Utf8Length());
+  FILE *fp = fopen(filePath, "rb");
+
+  // Pre allocate for a huge amount of segments
+  // Note: This is the strategy pathfinder-java uses.
+  Segment* segments = new Segment[4096];
+  int length = pathfinder_deserialize(fp, segments);
+  v8::Local<v8::Array> trajectoryArray = PathfinderConvert::createTrajectoryArray(segments, length);
+  
+  delete segments;
+  fclose(fp);
 
   info.GetReturnValue().Set(trajectoryArray);
 }
@@ -72,8 +127,17 @@ void Init(v8::Local<v8::Object> exports) {
   // WaypointObject::Init(exports);
   // SegmentObject::Init(exports);
 
-  exports->Set(Nan::New("GenerateTrajectory").ToLocalChecked(),
-    Nan::New<v8::FunctionTemplate>(GenerateTrajectory)->GetFunction());
+  exports->Set(Nan::New("generateTrajectory").ToLocalChecked(),
+    Nan::New<v8::FunctionTemplate>(generateTrajectory)->GetFunction());
+
+  exports->Set(Nan::New("generateTankTrajectories").ToLocalChecked(),
+    Nan::New<v8::FunctionTemplate>(generateTankTrajectories)->GetFunction());
+
+  exports->Set(Nan::New("serializeTrajectory").ToLocalChecked(),
+    Nan::New<v8::FunctionTemplate>(serializeTrajectory)->GetFunction());
+
+  exports->Set(Nan::New("deserializeTrajectory").ToLocalChecked(),
+    Nan::New<v8::FunctionTemplate>(deserializeTrajectory)->GetFunction());
 }
 
 // Module enterpoint: Called when the module is loaded.
