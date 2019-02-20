@@ -16,7 +16,7 @@
       ],
       "include_dirs": [
         "<!(node -e \"require('nan')\")",
-        "native-lib/pathfinder-core/2019.1.11/headers"
+        "native-lib/pathfinder-core/2019.1.12/headers"
       ],
       'link_settings': {
         'libraries': ['-l<@(pathfinder_root)/pathfinder'],
