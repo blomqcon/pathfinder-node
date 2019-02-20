@@ -12,7 +12,7 @@
       ],
       "libraries": [  ],
       'library_dirs': [
-        # "native-lib/pathfinder-core/2019.1.11/windowsx86-64"
+        # "native-lib/pathfinder-core/2019.1.12/windowsx86-64"
       ],
       "include_dirs": [
         "<!(node -e \"require('nan')\")",
