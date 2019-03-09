@@ -22,12 +22,44 @@ void generateTrajectory (const Nan::FunctionCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Array> waypointObjects = v8::Local<v8::Array>::Cast(info[0]);
   v8::Local<v8::Object> trajectoryConfigObject = v8::Local<v8::Array>::Cast(info[1]);
 
+  double dt = 0.05;
+  v8::Local<v8::String> dtPropertyName = Nan::New("dt").ToLocalChecked();
+  if (Nan::Has(trajectoryConfigObject, dtPropertyName).FromJust())
+  {
+    v8::Local<v8::Value> property = Nan::Get(trajectoryConfigObject, dtPropertyName).ToLocalChecked();
+    dt = Nan::To<double>(property).FromJust();
+  }
+
+  double maxAcceleration = 100.0;
+  v8::Local<v8::String> accelerationPropertyName = Nan::New("maxAcceleration").ToLocalChecked();
+  if (Nan::Has(trajectoryConfigObject, accelerationPropertyName).FromJust())
+  {
+    v8::Local<v8::Value> property = Nan::Get(trajectoryConfigObject, accelerationPropertyName).ToLocalChecked();
+    maxAcceleration = Nan::To<double>(property).FromJust();
+  }
+
+  double maxVelocity = 100.0;
+  v8::Local<v8::String> propertyName = Nan::New("maxVelocity").ToLocalChecked();
+  if (Nan::Has(trajectoryConfigObject, propertyName).FromJust())
+  {
+    v8::Local<v8::Value> property = Nan::Get(trajectoryConfigObject, propertyName).ToLocalChecked();
+    maxVelocity = Nan::To<double>(property).FromJust();
+  }
+
+  double maxJerk = 1000.0;
+  v8::Local<v8::String> maxJerkPropertyName = Nan::New("maxJerk").ToLocalChecked();
+  if (Nan::Has(trajectoryConfigObject, maxJerkPropertyName).FromJust())
+  {
+    v8::Local<v8::Value> property = Nan::Get(trajectoryConfigObject, maxJerkPropertyName).ToLocalChecked();
+    maxJerk = Nan::To<double>(property).FromJust();
+  }
+
   // TODO: Remember to delete this memory
   int numWaypoints = waypointObjects->Length();
   Waypoint* waypoints = PathfinderConvert::allocateWaypoints(waypointObjects);
   
   TrajectoryCandidate candidate;
-  pathfinder_prepare(waypoints, numWaypoints, FIT_HERMITE_CUBIC, PATHFINDER_SAMPLES_HIGH, 0.001, 15.0, 10.0, 60.0, &candidate);
+  pathfinder_prepare(waypoints, numWaypoints, FIT_HERMITE_CUBIC, PATHFINDER_SAMPLES_HIGH, dt, maxVelocity, maxAcceleration, maxJerk, &candidate);
 
   if (candidate.length <= 0)
   {
@@ -37,7 +69,12 @@ void generateTrajectory (const Nan::FunctionCallbackInfo<v8::Value>& info) {
   // TODO: Remember to Delete this memory
   Segment* trajectory = new Segment[candidate.length];
   pathfinder_generate(&candidate, trajectory);
+
+  //trajectory[candidate.length - 1].position = 69.0;
+
   v8::Local<v8::Array> trajectoryArray = PathfinderConvert::createTrajectoryArray(trajectory, candidate.length);
+
+  //std::cout << "Segements-To-Serialize: " << segmentObjects->Length() << "\n";
 
   info.GetReturnValue().Set(trajectoryArray);
 }

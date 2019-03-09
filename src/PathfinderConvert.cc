@@ -1,4 +1,5 @@
 #include "PathfinderConvert.h"
+#include <iostream>
 
 Waypoint* PathfinderConvert::allocateWaypoints(v8::Local<v8::Array> waypointObjects)
 {
@@ -17,6 +18,8 @@ Waypoint* PathfinderConvert::allocateWaypoints(v8::Local<v8::Array> waypointObje
     v8::Local<v8::Number> angleNumber = angleValue.ToLocalChecked().As<v8::Number>();
 
     waypoints[i] = { xNumber->Value(), yNumber->Value(), angleNumber->Value() };
+
+    std::cout << "Waypoint: " << angleNumber->Value() << "\n";
   }
   
   return waypoints;

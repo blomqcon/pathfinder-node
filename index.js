@@ -1,7 +1,7 @@
 'use strict'
 var pathfinderIO = require('./io');
 
-const devMode = true;
+const devMode = false;
 
 let pathfinder;
 if (devMode) {
